@@ -1,37 +1,54 @@
 from engine.vector import *
 from engine.body import *
 
-class Capsule:
-    def __init__(self, position, height, mass, radius=0.4):
-        half = height / 2
+class RigidCapsule:
+    def __init__(self, position, height, radius, mass):
+
+        self.position = position  # center
+        self.velocity = Vector3()
+
+        self.orientation = Vector3(0, 0, 1)  # axis direction (unit vector)
+        self.angular_velocity = Vector3()
+
         self.radius = radius
+        self.half_length = height * 0.5
 
-        self.p1 = Body(
-            mass=mass/2,
-            position=position + Vector3(0, 0, half),
-            velocity=Vector3(),
-            radius=radius
-        )
+        self.mass = mass
+        self.inv_mass = 1.0 / mass
 
-        self.p2 = Body(
-            mass=mass/2,
-            position=position - Vector3(0, 0, half),
-            velocity=Vector3(),
-            radius=radius
-        )
+        # Approx inertia (capsule ~ cylinder)
+        I = (1/12) * mass * (3*radius*radius + height*height)
+        self.inertia = I
+        self.inv_inertia = 1.0 / I
 
-        self.rest_length = height
+def get_capsule_endpoints(cap):
+    axis = cap.orientation.normalize()
+    p1 = cap.position + axis * cap.half_length
+    p2 = cap.position - axis * cap.half_length
+    return p1, p2
 
+def solve_capsules_array(self):
+    for i in range(len(self.cap_pos1)):
 
-def solve_capsule_constraint(capsule):
-    delta = capsule.p2.position - capsule.p1.position
-    dist = delta.magnitude()
+        p1 = self.cap_pos1[i]
+        p2 = self.cap_pos2[i]
 
-    if dist == 0:
-        return
+        delta = p2 - p1
+        dist = np.linalg.norm(delta)
 
-    diff = (dist - capsule.rest_length) / dist
-    correction = delta * 0.5 * diff
+        if dist < 1e-6:
+            continue
 
-    capsule.p1.position += correction
-    capsule.p2.position -= correction
+        direction = delta / dist
+        error = dist - self.cap_rest_length[i]
+
+        correction = 0.5 * error * direction
+
+        self.cap_pos1[i] += correction
+        self.cap_pos2[i] -= correction
+
+def closest_point_on_segment(a, b, p):
+    ab = b - a
+    t = (p - a).dot(ab) / ab.dot(ab)
+    t = max(0.0, min(1.0, t))
+    return a + ab * t

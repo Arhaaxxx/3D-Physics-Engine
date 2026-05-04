@@ -12,7 +12,12 @@
 #include <fstream>
 #include <vector>
 
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iostream>
+#include <string>
 
+#pragma comment(lib, "ws2_32.lib")
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -26,8 +31,7 @@ const char* FILE_PATH = "C:/Users/arhaa/OneDrive/Desktop/AA/state.json";
 // NEW BODY STRUCT (ADDED)
 // =========================
 struct BodyData {
-    float px, py, pz;
-    float rx, ry, rz;
+    glm::vec3 position;
     float radius;
 };
 
@@ -39,76 +43,89 @@ struct Vec3 {
 // CAPSULE STRUCT (ADDED)
 // =========================
 struct CapsuleData {
-    Vec3 p1;
-    Vec3 p2;
+    glm::vec3 p1;
+    glm::vec3 p2;
     float radius;
     float height;
 };
 
+std::vector<BodyData> bodies;
+std::vector<CapsuleData> capsules;
+
+SOCKET sock;
+char buffer[65536];
+std::string incoming;
+
 // =========================
 // SAFE JSON LOAD
 // =========================
-std::vector<BodyData> loadBodies() {
-    static std::vector<BodyData> lastValid;
+// std::vector<BodyData> loadBodies() {
+//     static std::vector<BodyData> lastValid;
 
-    std::ifstream f(FILE_PATH);
-    if (!f.is_open()) return lastValid;
+//     std::ifstream f(FILE_PATH);
+//     if (!f.is_open()) return lastValid;
 
-    try {
-        json j; 
-        f >> j;
+//     try {
+//         json j; 
+//         f >> j;
 
-        std::vector<BodyData> bodies;
+//         std::vector<BodyData> bodies;
 
-        for (auto& b : j["bodies"]) {
-            auto p = b["position"];
-            auto r = b["rotation"];
+//         for (auto& b : j["bodies"]) {
+//             auto p = b["position"];
+//             auto r = b["rotation"];
 
-            bodies.push_back({
-                (float)p[0], (float)p[1], (float)p[2],
-                (float)r[0], (float)r[1], (float)r[2],
-                (float)b["radius"]
-            });
-        }
+//             bodies.push_back({
+//                 (float)p[0], (float)p[1], (float)p[2],
+//                 (float)r[0], (float)r[1], (float)r[2],
+//                 (float)b["radius"]
+//             });
+//         }
 
-        lastValid = bodies;
-        return bodies;
+//         lastValid = bodies;
+//         return bodies;
 
-    } catch (...) {
-        return lastValid;
-    }
-}
+//     } catch (...) {
+//         return lastValid;
+//     }
+// }
 
 // =========================
 // LOAD CAPSULES (ADDED)
 // =========================
-std::vector<CapsuleData> loadCapsules() {
-    std::vector<CapsuleData> caps;
+// std::vector<CapsuleData> loadCapsules() {
+//     static std::vector<CapsuleData> lastValid;
 
-    std::ifstream f(FILE_PATH);
-    if (!f.is_open()) return caps;
+//     std::ifstream f(FILE_PATH);
+//     if (!f.is_open()) return lastValid;
 
-    try {
-        json j;
-        f >> j;
+//     try {
+//         json j;
+//         f >> j;
 
-        if (j.contains("capsules")) {
-            for (auto& c : j["capsules"]) {
-                auto a = c["p1"];
-                auto b = c["p2"];
+//         std::vector<CapsuleData> caps;
 
-                caps.push_back({
-                    { (float)a[0], (float)a[1], (float)a[2] },
-                    { (float)b[0], (float)b[1], (float)b[2] },
-                    (float)c["radius"],
-                    (float)c["height"]
-                });
-            }
-        }
-    } catch (...) {}
+//         if (j.contains("capsules")) {
+//             for (auto& c : j["capsules"]) {
+//                 auto a = c["p1"];
+//                 auto b = c["p2"];
 
-    return caps;
-}
+//                 caps.push_back({
+//                     { (float)a[0], (float)a[1], (float)a[2] },
+//                     { (float)b[0], (float)b[1], (float)b[2] },
+//                     (float)c["radius"],
+//                     (float)c["height"]
+//                 });
+//             }
+//         }
+
+//         lastValid = caps;
+//         return caps;
+
+//     } catch (...) {
+//         return lastValid;
+//     }
+// }
 
 // =========================
 // SHADER UTILS
@@ -156,6 +173,103 @@ glm::mat4 rotationFromDirection(glm::vec3 dir) {
     float angle = acos(c);
 
     return glm::rotate(glm::mat4(1.0f), angle, axis);
+}
+
+void initSocket() {
+    WSADATA wsaData;
+    WSAStartup(MAKEWORD(2,2), &wsaData);
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in server;
+    server.sin_family = AF_INET;
+    server.sin_port = htons(65432);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    if (connect(sock, (sockaddr*)&server, sizeof(server)) < 0) {
+        std::cout << "Connection failed\n";
+    } else {
+        std::cout << "Connected to Python\n";
+    }
+}
+
+void receiveData() {
+
+    // ---------- 1. READ SIZE (4 bytes) ----------
+    int size = 0;
+    int received = 0;
+
+    while (received < 4) {
+        int r = recv(sock, ((char*)&size) + received, 4 - received, 0);
+        if (r <= 0) return;  // disconnected
+        received += r;
+    }
+
+    // ---------- 2. READ FULL JSON ----------
+    std::vector<char> buffer(size);
+    int total = 0;
+
+    while (total < size) {
+        int r = recv(sock, buffer.data() + total, size - total, 0);
+        if (r <= 0) return;  // disconnected
+        total += r;
+    }
+
+    // ---------- 3. PARSE ----------
+    try {
+        std::string data(buffer.begin(), buffer.end());
+        json j = json::parse(data);
+
+        // ---------- BODIES ----------
+        bodies.clear();
+
+        if (j.contains("bodies")) {
+            for (auto& b : j["bodies"]) {
+
+                BodyData bdata;
+
+                bdata.position = glm::vec3(
+                    (float)b["position"][0],
+                    (float)b["position"][1],
+                    (float)b["position"][2]
+                );
+
+                bdata.radius = (float)b["radius"];
+
+                bodies.push_back(bdata);
+            }
+        }
+
+        // ---------- CAPSULES ----------
+        capsules.clear();
+
+        if (j.contains("capsules")) {
+            for (auto& c : j["capsules"]) {
+
+                CapsuleData cap;
+
+                cap.p1 = glm::vec3(
+                    (float)c["p1"][0],
+                    (float)c["p1"][1],
+                    (float)c["p1"][2]
+                );
+
+                cap.p2 = glm::vec3(
+                    (float)c["p2"][0],
+                    (float)c["p2"][1],
+                    (float)c["p2"][2]
+                );
+
+                cap.radius = (float)c["radius"];
+                cap.height = (float)c["height"];
+
+                capsules.push_back(cap);
+            }
+        }
+
+    } catch (...) {
+        // ignore malformed frame
+    }
 }
 
 glm::vec3 camPos(0.0f, -10.0f, 6.0f);
@@ -454,10 +568,12 @@ int main() {
     #version 330 core
     out vec4 FragColor;
     void main(){
-        FragColor = vec4(0.9,0.3,0.3,1.0);
+        FragColor = vec4(0.3,0.9,0.9,1.0);
     })";
 
     GLuint cubeShader = createProgram(vs, fs);
+
+    initSocket();
 
     // =========================
     // LOOP
@@ -501,11 +617,9 @@ int main() {
         glClearColor(0.1f,0.1f,0.15f,1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        auto bodies = loadBodies();
+        receiveData();
 
         static std::vector<CapsuleData> lastCapsules;
-
-        auto capsules = loadCapsules();
 
         if (!capsules.empty()) {
             lastCapsules = capsules;
@@ -523,7 +637,7 @@ int main() {
 
         // include bodies
         for (auto& b : bodies) {
-            center += glm::vec3(b.px/5.0f, b.py/5.0f, b.pz/5.0f);
+            center += b.position / 5.0f;
             count++;
         }
 
@@ -564,15 +678,14 @@ int main() {
             // if (i == 0) continue;
             BodyData b = bodies[i];
 
-            glm::vec3 position = glm::vec3(b.px/5.0f, b.py/5.0f, b.pz/5.0f);
-            glm::vec3 rotation = glm::vec3(b.rx, b.ry, b.rz);
+            glm::vec3 position = b.position / 5.0f;
 
             glm::mat4 model = glm::translate(glm::mat4(1.0f), position);
 
-            // 🔥 ROTATION (THIS FIXES YOUR ISSUE)
-            model = glm::rotate(model, rotation.x, glm::vec3(1,0,0));
-            model = glm::rotate(model, rotation.y, glm::vec3(0,1,0));
-            model = glm::rotate(model, rotation.z, glm::vec3(0,0,1));
+            // // 🔥 ROTATION (THIS FIXES YOUR ISSUE)
+            // model = glm::rotate(model, rotation.x, glm::vec3(1,0,0));
+            // model = glm::rotate(model, rotation.y, glm::vec3(0,1,0));
+            // model = glm::rotate(model, rotation.z, glm::vec3(0,0,1));
 
             // 🔥 SHAPE VISUALIZATION
             // (we infer shape by size for now since JSON doesn’t include shape)
@@ -600,24 +713,51 @@ int main() {
             glm::vec3 a(c.p1.x/5.0f, c.p1.y/5.0f, c.p1.z/5.0f);
             glm::vec3 b(c.p2.x/5.0f, c.p2.y/5.0f, c.p2.z/5.0f);
 
-            glm::vec3 dir = glm::normalize(b - a);
-            float fullLength = glm::length(b - a);
+            float radius = c.radius / 5.0f;
 
-            float radius = c.radius / 5.0f;   // keep your scale factor
-            float length = c.height / 5.0f;
+            glm::vec3 diff = b - a;
+            float fullLength = glm::length(diff);
 
-            if (length < 0.0f) length = 0.0f;
+            if (fullLength < 0.0001f) continue;
 
-            // ✅ CORRECT MIDPOINT (FIX)
-            glm::vec3 mid = (a + b) * 0.5f;
+            glm::vec3 dir = diff / fullLength;
+
+            // 🔥 Correct endpoints (surface → surface)
+            glm::vec3 start = a + dir * radius;
+            glm::vec3 end   = b - dir * radius;
+
+            float length = glm::length(end - start) + 2.0f * radius;
+            if (length < 0.001f) length = 0.001f;
+
+            glm::vec3 mid = (start + end) * 0.5f;
+
+            // -------- CORRECT ROTATION --------
+            glm::vec3 up = glm::vec3(0, 0, 1);  // cylinder default axis
+
+            float dot = glm::dot(up, dir);
+
+            glm::mat4 rotation;
+
+            if (dot > 0.9999f) {
+                rotation = glm::mat4(1.0f);
+            }
+            else if (dot < -0.9999f) {
+                rotation = glm::rotate(glm::mat4(1.0f), glm::pi<float>(), glm::vec3(1,0,0));
+            }
+            else {
+                glm::vec3 axis = glm::normalize(glm::cross(up, dir));
+                float angle = acos(dot);
+                rotation = glm::rotate(glm::mat4(1.0f), angle, axis);
+            }
 
             // -------- CYLINDER --------
             glBindVertexArray(cVAO);
 
             glm::mat4 model =
                 glm::translate(glm::mat4(1.0f), mid) *
-                rotationFromDirection(dir) *
-                glm::scale(glm::mat4(1.0f), glm::vec3(radius, radius, length));
+                rotation *
+                glm::scale(glm::mat4(1.0f), glm::vec3(radius, radius, length)) *
+                glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0));
 
             glm::mat4 MVP = projection * view * model;
 

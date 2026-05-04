@@ -1,18 +1,20 @@
 import json
+import os
 import math
 import time
+import socket
 from engine.engine import PhysicsEngine, Body, Vector3
-from engine.capsule import Capsule
+from engine.capsule import RigidCapsule
 
 engine = PhysicsEngine()
 
 engine.capsules = []
 
-cap = Capsule(
+cap = RigidCapsule(
     position=Vector3(0, 0, 20),
-    height=6,
+    height=10,
     mass=10,
-    radius=2
+    radius=1
 )
 
 engine.capsules.append(cap)
@@ -36,15 +38,29 @@ for x in range(-5, 5):
             engine.add_bodies(
                 Body(
                     mass=0.1,
-                    position=Vector3(x*0.8, y*0.8, z*0.8+2),
+                    position=Vector3(x*0.6, y*0.6, z*0.6+2),
                     velocity=Vector3(0,0,0),
                     shape="sphere",
                     radius=0.2
                 )
             )
 
+engine.build_arrays()
+
 #loop
 dt = 0.01
+
+
+HOST = '127.0.0.1'
+PORT = 65432
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind((HOST, PORT))
+server.listen(1)
+
+print("Waiting for renderer to connect...")
+conn, addr = server.accept()
+print("Connected:", addr)
 
 while True:
     engine.accumulator += dt
@@ -53,7 +69,20 @@ while True:
         engine.step(engine.fixed_dt)
         engine.accumulator -= engine.fixed_dt
 
-    with open("state.json", "w") as f:
-        json.dump(engine.export_state(), f)
+    try:
+        # ---------- PREPARE DATA ----------
+        state = engine.export_state()
+        data = json.dumps(state).encode("utf-8")
+
+        # ---------- SEND LENGTH FIRST ----------
+        size = len(data)
+        conn.sendall(size.to_bytes(4, byteorder="little"))
+
+        # ---------- SEND DATA ----------
+        conn.sendall(data)
+
+    except Exception as e:
+        print("Connection lost:", e)
+        break
 
     time.sleep(dt)

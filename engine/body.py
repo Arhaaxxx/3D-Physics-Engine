@@ -7,6 +7,8 @@ class Body:
         self.position = position
         self.velocity = velocity
 
+        self.inv_mass = 1.0 / mass if mass > 0 else 0.0 
+
         self.shape = shape
         self.radius = radius
         self.height = height
