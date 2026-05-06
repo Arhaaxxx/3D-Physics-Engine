@@ -35,3 +35,37 @@ def ground_friction(body, mu=0.6):
 
     return Vector3(0,0,0)
 
+def integrate_rotation(q, omega, dt):
+
+    w, x, y, z = q
+
+    ox, oy, oz = omega.x, omega.y, omega.z
+
+    dq = [
+        0,
+        ox,
+        oy,
+        oz
+    ]
+
+    qw = -x * ox + y * oy - z * oz
+    qx = w * ox + y * oz - z * oy
+    qy = w * oy + z * ox - x * oz
+    qz = w * oz + x * oy - y * ox
+
+    w += 0.5 * qw * dt
+    x += 0.5 * qx * dt
+    y += 0.5 * qy * dt
+    z += 0.5 * qz * dt
+
+    mag = math.sqrt(w * w + x * x + y * y + z * z)
+    return [w/mag, x/mag, y/mag, z/mag]
+
+def quat_to_axis(q):
+    w, x, y, z = q
+
+    return Vector3(
+        2 * (x * z + w * y),
+        2 * (y * z + w * x),
+        1 - 2 * (x * x + y * y)
+    )

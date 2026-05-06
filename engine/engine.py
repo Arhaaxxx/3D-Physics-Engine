@@ -168,7 +168,7 @@ class PhysicsEngine:
                 # ---------- CAPSULE-GROUND (ADD HERE) ----------
                 for cap in self.capsules:
 
-                    axis = cap.orientation.normalize()
+                    axis = quat_to_axis(cap.orientation)
 
                     p1 = cap.position + axis * cap.half_length
                     p2 = cap.position - axis * cap.half_length
@@ -178,38 +178,28 @@ class PhysicsEngine:
 
                     if contact.z - cap.radius < 0:
 
-                        normal = Vector3(0, 0, 1)
                         penetration = cap.radius - contact.z
-
-                        # ---------- POSITION ----------
                         cap.position.z += penetration
 
-                        # ---------- VELOCITY ----------
-                        rel_v = cap.velocity
+                        normal = Vector3(0, 0, 1)
 
-                        vn = rel_v.dot(normal)
-
+                        vn = cap.velocity.dot(normal)
                         if vn < 0:
-                            restitution = 0.1
-                            cap.velocity -= normal * (1 + restitution) * vn
+                            cap.velocity -= normal * vn
 
-                        # ---------- FRICTION (VERY IMPORTANT) ----------
-                        tangent = cap.velocity - normal * cap.velocity.dot(normal)
-                        cap.velocity -= tangent * 0.2   # friction strength
+                        vt = Vector3(cap.velocity.x, cap.velocity.y, 0)
+                        cap.velocity.x -= vt.x *0.2
+                        cap.velocity.y -= vt.y *0.2
 
-                        # ---------- TORQUE FROM CONTACT ----------
-                        r = contact - cap.position
+                        axis = quat_to_axis(cap.orientation)
 
-                        # simulate friction torque
-                        friction_impulse = tangent * 0.5
+                        tilt = axis.x*axis.x + axis.y*axis.y
 
-                        torque = Vector3(
-                            r.y * friction_impulse.z - r.z * friction_impulse.y,
-                            r.z * friction_impulse.x - r.x * friction_impulse.z,
-                            r.x * friction_impulse.y - r.y * friction_impulse.x
-                        )
+                        if tilt > 1e-4:
+                            torque = Vector3(-axis.x, axis.y, 0)
+                            cap.angular_velocity += torque *0.2
 
-                        cap.angular_velocity -= torque * cap.inv_inertia * 2.0
+                        cap.angular_velocity *= 0.98
 
                 # ---------- SPHERE-CAPSULE ----------
                 for body in self.bodies:
@@ -217,7 +207,7 @@ class PhysicsEngine:
                     for cap in self.capsules:
 
                         # endpoints from rigid capsule
-                        axis = cap.orientation.normalize()
+                        axis = quat_to_axis(cap.orientation)
                         p1 = cap.position + axis * cap.half_length
                         p2 = cap.position - axis * cap.half_length
 
@@ -284,10 +274,17 @@ class PhysicsEngine:
                     self.pos[i] = [b.position.x, b.position.y, b.position.z]
                     self.vel[i] = [b.velocity.x, b.velocity.y, b.velocity.z]
 
+            for cap in self.capsules:
+                cap.velocity *= 0.999
+                cap.angular_velocity *= 0.995
+
             # ---------- CAPSULE ROTATION ----------
             for cap in self.capsules:
-                cap.orientation = (cap.orientation + cap.angular_velocity * h).normalize()
-
+                cap.orientation = integrate_rotation(
+                    cap.orientation,
+                    cap.angular_velocity,
+                    h
+                )
         # ---------- FINAL ----------
         self.curr_pos = self.pos.copy()
 
@@ -310,7 +307,7 @@ class PhysicsEngine:
 
         for cap in self.capsules:
 
-            axis = cap.orientation.normalize()
+            axis = quat_to_axis(cap.orientation)
 
             p1 = cap.position + axis * cap.half_length
             p2 = cap.position - axis * cap.half_length

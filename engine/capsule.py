@@ -1,5 +1,7 @@
 from engine.vector import *
 from engine.body import *
+import math
+
 
 class RigidCapsule:
     def __init__(self, position, height, radius, mass):
@@ -7,7 +9,7 @@ class RigidCapsule:
         self.position = position  # center
         self.velocity = Vector3()
 
-        self.orientation = Vector3(0, 0, 1)  # axis direction (unit vector)
+        self.orientation = [1, 0, 0, 0] # this is for quaternion w, x, y, z
         self.angular_velocity = Vector3()
 
         self.radius = radius
