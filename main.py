@@ -5,6 +5,7 @@ import time
 import socket
 from engine.engine import PhysicsEngine, Body, Vector3
 from engine.capsule import RigidCapsule
+from engine.rendering.export import export_state
 
 engine = PhysicsEngine()
 
@@ -13,7 +14,7 @@ engine.capsules = []
 cap = RigidCapsule(
     position=Vector3(0, 0, 20),
     height=10,
-    mass=10,
+    mass=100,
     radius=1
 )
 
@@ -40,7 +41,7 @@ for x in range(-5, 5):
 
             engine.add_bodies(
                 Body(
-                    mass=0.1,
+                    mass=0.05,
                     position=Vector3(x*0.6, y*0.6, z*0.6+2),
                     velocity=Vector3(0,0,0),
                     shape="sphere",
@@ -74,7 +75,7 @@ while True:
 
     try:
         # ---------- PREPARE DATA ----------
-        state = engine.export_state()
+        state = export_state(engine)
         data = json.dumps(state).encode("utf-8")
 
         # ---------- SEND LENGTH FIRST ----------
