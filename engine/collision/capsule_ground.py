@@ -23,11 +23,7 @@ def solve_capsule_ground(cap):
         r = contact - cap.position
 
         # ---------- CONTACT VELOCITY ----------
-        v_contact = cap.velocity + Vector3(
-            cap.angular_velocity.y * r.z - cap.angular_velocity.z * r.y,
-            cap.angular_velocity.z * r.x - cap.angular_velocity.x * r.z,
-            cap.angular_velocity.x * r.y - cap.angular_velocity.y * r.x
-        )
+        v_contact = cap.velocity + cap.angular_velocity.cross(r)
 
         # ---------- NORMAL VELOCITY ----------
         # use stronger downward component
@@ -70,11 +66,7 @@ def solve_capsule_ground(cap):
             cap.velocity.y *= 0.95
 
             # ---------- ANGULAR ----------
-            torque = Vector3(
-                r.y * impulse.z - r.z * impulse.y,
-                r.z * impulse.x - r.x * impulse.z,
-                r.x * impulse.y - r.y * impulse.x
-            )
+            torque = r.cross(impulse)
 
             angular_accel = cap.world_inv_inertia_tensor * torque
 
@@ -88,18 +80,3 @@ def solve_capsule_ground(cap):
                 r,
                 j
             )
-
-        # ---------- SMALL GROUND TORQUE ----------
-        r = contact - cap.position
-
-        gravity_force = Vector3(0, 0, -9.81 * cap.mass)
-
-        torque = Vector3(
-            r.y * gravity_force.z - r.z * gravity_force.y,
-            r.z * gravity_force.x - r.x * gravity_force.z,
-            r.x * gravity_force.y - r.y * gravity_force.x
-        )
-
-        angular_accel = cap.world_inv_inertia_tensor * torque
-
-        cap.angular_velocity -= angular_accel * 0.01

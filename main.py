@@ -13,14 +13,14 @@ engine.capsules = []
 
 cap = RigidCapsule(
     position=Vector3(0, 0, 20),
-    height=10,
-    mass=5,
+    height=5,
+    mass=1,
     radius=1
 )
 
 # cap.orientation = Vector3(0,0,1)
-cap.angular_velocity = Vector3(0.5,0.2,0)
-cap.velocity = Vector3(100,0,0)
+cap.angular_velocity = Vector3(0,1,0)
+# cap.velocity = Vector3(0,100,0)
 
 engine.capsules.append(cap)
 
