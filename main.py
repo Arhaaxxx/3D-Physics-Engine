@@ -17,6 +17,9 @@ cap = RigidCapsule(
     radius=1
 )
 
+# cap.orientation = Vector3(0,0,1)
+cap.angular_velocity = Vector3(0.05,0,0)
+
 engine.capsules.append(cap)
 
 # target = Body(

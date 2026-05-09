@@ -36,6 +36,11 @@ class PhysicsEngine:
 
     def build_arrays(self):
 
+        self.pos = np.zeros((0, 3))
+        self.vel = np.zeros((0, 3))
+        self.radius = np.zeros(0)
+        self.mass = np.zeros(0)
+
         # ---------- SPHERES ----------
         n = len(self.bodies)
 
@@ -129,7 +134,13 @@ class PhysicsEngine:
         for _ in range(substeps):
 
             # ---------- 1. APPLY FORCES ----------
-            self.vel[:, 2] -= 9.81 * h
+            # ---------- SPHERE UPDATE ----------
+            if len(self.pos) > 0:
+
+                self.vel[:, 2] -= 9.81 * h
+                self.vel *= 0.999
+
+                self.pos += self.vel * h
 
             for cap in self.capsules:
                 cap.velocity.z -= 9.81 * h
@@ -173,33 +184,82 @@ class PhysicsEngine:
                     p1 = cap.position + axis * cap.half_length
                     p2 = cap.position - axis * cap.half_length
 
-                    # lowest point
                     contact = p1 if p1.z < p2.z else p2
 
                     if contact.z - cap.radius < 0:
-
-                        penetration = cap.radius - contact.z
-                        cap.position.z += penetration
-
                         normal = Vector3(0, 0, 1)
 
-                        vn = cap.velocity.dot(normal)
+                        penetration = cap.radius - contact.z
+
+                        # position correction
+                        cap.position.z += penetration * 0.8
+
+                        # ---------- CONTACT VECTOR ----------
+                        r = contact - cap.position
+
+                        # ---------- CONTACT VELOCITY ----------
+                        v_contact = cap.velocity + Vector3(
+                            cap.angular_velocity.y * r.z - cap.angular_velocity.z * r.y,
+                            cap.angular_velocity.z * r.x - cap.angular_velocity.x * r.z,
+                            cap.angular_velocity.x * r.y - cap.angular_velocity.y * r.x
+                        )
+
+                        # ---------- NORMAL VELOCITY ----------
+                        # use stronger downward component
+                        vn = min(v_contact.dot(normal), cap.velocity.z)
+
                         if vn < 0:
-                            cap.velocity -= normal * vn
 
-                        vt = Vector3(cap.velocity.x, cap.velocity.y, 0)
-                        cap.velocity.x -= vt.x *0.2
-                        cap.velocity.y -= vt.y *0.2
+                            restitution = 0.1 if abs(vn) > 0.5 else 0.0
 
-                        axis = quat_to_axis(cap.orientation)
+                            # effective rotational mass
+                            r_cross_n = Vector3(
+                                r.y * normal.z - r.z * normal.y,
+                                r.z * normal.x - r.x * normal.z,
+                                r.x * normal.y - r.y * normal.x
+                            )
 
-                        tilt = axis.x*axis.x + axis.y*axis.y
+                            effective_mass = (
+                                cap.inv_mass +
+                                (r_cross_n.magnitude() ** 2) * cap.inv_inertia
+                            )
 
-                        if tilt > 1e-4:
-                            torque = Vector3(-axis.x, axis.y, 0)
-                            cap.angular_velocity += torque *0.2
+                            j = -(1 + restitution) * vn
 
-                        cap.angular_velocity *= 0.98
+                            if effective_mass > 1e-6:
+                                j /= effective_mass
+
+                            impulse = normal * j
+
+                            # ---------- LINEAR ----------
+                            cap.velocity += impulse * cap.inv_mass
+
+                            # horizontal damping on impact
+                            cap.velocity.x *= 0.95
+                            cap.velocity.y *= 0.95
+
+                            # ---------- ANGULAR ----------
+                            torque = Vector3(
+                                r.y * impulse.z - r.z * impulse.y,
+                                r.z * impulse.x - r.x * impulse.z,
+                                r.x * impulse.y - r.y * impulse.x
+                            )
+
+                            cap.angular_velocity += torque * cap.inv_inertia * 0.6
+
+                        # ---------- SMALL GROUND TORQUE ----------
+                        r = contact - cap.position
+
+                        gravity_force = Vector3(0, 0, -9.81 * cap.mass)
+
+                        torque = Vector3(
+                            r.y * gravity_force.z - r.z * gravity_force.y,
+                            r.z * gravity_force.x - r.x * gravity_force.z,
+                            r.x * gravity_force.y - r.y * gravity_force.x
+                        )
+
+                        cap.angular_velocity -= torque * cap.inv_inertia * 0.01
+
 
                 # ---------- SPHERE-CAPSULE ----------
                 for body in self.bodies:
@@ -236,7 +296,7 @@ class PhysicsEngine:
                             # ---------- POSITION CORRECTION ----------
                             total_inv_mass = body.inv_mass + cap.inv_mass
 
-                            correction = normal * (penetration / total_inv_mass)
+                            correction = normal * (penetration / total_inv_mass) * 0.15
 
                             body.position += correction * body.inv_mass
                             cap.position -= correction * cap.inv_mass
@@ -266,7 +326,7 @@ class PhysicsEngine:
                                     r.x * impulse.y - r.y * impulse.x
                                 )
 
-                                angular_str = 3;
+                                angular_str = 0.1;
                                 cap.angular_velocity -= torque * cap.inv_inertia * angular_str
 
                 # ---- SYNC BACK ----
@@ -276,9 +336,21 @@ class PhysicsEngine:
 
             for cap in self.capsules:
                 cap.velocity *= 0.999
-                cap.angular_velocity *= 0.995
+                if abs(cap.velocity.z) < 0.2:
+                    cap.angular_velocity *= 0.98
+                else:
+                    cap.angular_velocity *= 0.995
+
+                # ---------- SLEEP ----------
+                if (
+                    cap.velocity.magnitude() < 0.03 and
+                    cap.angular_velocity.magnitude() < 0.03
+                ):
+                    cap.velocity = Vector3(0,0,0)
+                    cap.angular_velocity = Vector3(0,0,0)
 
             # ---------- CAPSULE ROTATION ----------
+            print("ANG VEL:", cap.angular_velocity.magnitude())
             for cap in self.capsules:
                 cap.orientation = integrate_rotation(
                     cap.orientation,
@@ -325,7 +397,7 @@ class PhysicsEngine:
                 "height": height
             })
 
-        print("EXPORT:", len(bodies_out), "bodies,", len(capsules_out), "capsules")
+        # print("EXPORT:", len(bodies_out), "bodies,", len(capsules_out), "capsules")
 
         return {
             "bodies": bodies_out,

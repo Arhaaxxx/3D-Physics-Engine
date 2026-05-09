@@ -9,7 +9,14 @@ class RigidCapsule:
         self.position = position  # center
         self.velocity = Vector3()
 
-        self.orientation = [1, 0, 0, 0] # this is for quaternion w, x, y, z
+        # rotate local Y axis into world Z axis
+        self.orientation = [
+            0.7071,
+            0.7071,
+            0,
+            0
+        ] # this is for quaternion w, x, y, z
+        
         self.angular_velocity = Vector3()
 
         self.radius = radius

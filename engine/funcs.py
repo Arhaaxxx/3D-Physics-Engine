@@ -57,15 +57,35 @@ def integrate_rotation(q, omega, dt):
     x += 0.5 * qx * dt
     y += 0.5 * qy * dt
     z += 0.5 * qz * dt
-
+    
     mag = math.sqrt(w * w + x * x + y * y + z * z)
+
+    if mag < 1e-8:
+        return [1, 0, 0, 0]
+
     return [w/mag, x/mag, y/mag, z/mag]
 
 def quat_to_axis(q):
+
     w, x, y, z = q
 
-    return Vector3(
-        2 * (x * z + w * y),
-        2 * (y * z + w * x),
-        1 - 2 * (x * x + y * y)
-    )
+    # local up vector
+    vx, vy, vz = 0, 1, 0
+
+    # q * v
+    ix =  w * vx + y * vz - z * vy
+    iy =  w * vy + z * vx - x * vz
+    iz =  w * vz + x * vy - y * vx
+    iw = -x * vx - y * vy - z * vz
+
+    # result * conj(q)
+    rx = ix * w + iw * -x + iy * -z - iz * -y
+    ry = iy * w + iw * -y + iz * -x - ix * -z
+    rz = iz * w + iw * -z + ix * -y - iy * -x
+
+    axis = Vector3(rx, ry, rz)
+
+    if axis.magnitude() < 1e-6:
+        return Vector3(0,0,1)
+
+    return axis.normalize()
