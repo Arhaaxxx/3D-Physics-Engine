@@ -1,5 +1,6 @@
 from engine.vector import *
 from engine.bodies.body import *
+from engine.math.inertia import capsule_inertia_tensor
 import math
 
 
@@ -25,7 +26,14 @@ class RigidCapsule:
         self.mass = mass
         self.inv_mass = 1.0 / mass
 
-        # Approx inertia (capsule ~ cylinder)
-        I = (1/12) * mass * (3*radius*radius + height*height)
-        self.inertia = I
-        self.inv_inertia = 1.0 / I
+        self.inertia_tensor = capsule_inertia_tensor(
+            mass,
+            radius,
+            height
+        )
+
+        from engine.math.inertia import inverse_tensor
+
+        self.inv_inertia_tensor = inverse_tensor(
+            self.inertia_tensor
+        )

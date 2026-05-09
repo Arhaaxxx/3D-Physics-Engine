@@ -1,5 +1,6 @@
 from engine.vector import Vector3
 from engine.quaternion import quat_to_axis
+from engine.solver.friction_solver import apply_friction
 
 def solve_capsule_ground(cap):
 
@@ -34,7 +35,7 @@ def solve_capsule_ground(cap):
 
         if vn < 0:
 
-            restitution = 0.1 if abs(vn) > 0.5 else 0.0
+            restitution = 0.3
 
             # effective rotational mass
             r_cross_n = Vector3(
@@ -45,7 +46,13 @@ def solve_capsule_ground(cap):
 
             effective_mass = (
                 cap.inv_mass +
-                (r_cross_n.magnitude() ** 2) * cap.inv_inertia
+                (r_cross_n.magnitude() ** 2) * (
+                    (
+                        cap.inv_inertia_tensor.m[0][0] +
+                        cap.inv_inertia_tensor.m[1][1] +
+                        cap.inv_inertia_tensor.m[2][2]
+                    ) / 3.0
+                )
             )
 
             j = -(1 + restitution) * vn
@@ -69,7 +76,18 @@ def solve_capsule_ground(cap):
                 r.x * impulse.y - r.y * impulse.x
             )
 
-            cap.angular_velocity += torque * cap.inv_inertia * 0.6
+            angular_accel = cap.world_inv_inertia_tensor * torque
+
+            cap.angular_velocity += angular_accel * 0.6
+
+            apply_friction(
+                cap,
+                normal,
+                v_contact,
+                vn,
+                r,
+                j
+            )
 
         # ---------- SMALL GROUND TORQUE ----------
         r = contact - cap.position
@@ -82,4 +100,6 @@ def solve_capsule_ground(cap):
             r.x * gravity_force.y - r.y * gravity_force.x
         )
 
-        cap.angular_velocity -= torque * cap.inv_inertia * 0.01
+        angular_accel = cap.world_inv_inertia_tensor * torque
+
+        cap.angular_velocity -= angular_accel * 0.01

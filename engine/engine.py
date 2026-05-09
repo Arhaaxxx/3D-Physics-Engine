@@ -85,10 +85,23 @@ class PhysicsEngine:
             if not hasattr(cap, "inv_mass"):
                 cap.inv_mass = 1.0 / cap.mass if cap.mass > 0 else 0
 
-            if not hasattr(cap, "inv_inertia"):
-                # simple inertia approximation
-                I = (1/12) * cap.mass * (3*cap.radius*cap.radius + (2*cap.half_length)**2)
-                cap.inv_inertia = 1.0 / I if I > 0 else 0
+            if not hasattr(cap, "inv_inertia_tensor"):
+
+                from engine.math.inertia import capsule_inertia_tensor
+
+                cap.inertia_tensor = capsule_inertia_tensor(
+                    cap.mass,
+                    cap.radius,
+                    cap.half_length * 2
+                )
+
+                inv_mass = 1.0 / cap.mass if cap.mass > 0 else 0
+
+                cap.inv_inertia_tensor = capsule_inertia_tensor(
+                    inv_mass,
+                    cap.radius,
+                    cap.half_length * 2
+                )
                 
 
         # ---------- PREV (for interpolation) ----------

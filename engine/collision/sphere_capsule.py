@@ -43,7 +43,7 @@ def solve_sphere_capsule(cap, body):
 
         if vn < 0:
 
-            restitution = 0.2
+            restitution = 0.8
 
             j = -(1 + restitution) * vn
             j /= total_inv_mass
@@ -62,5 +62,7 @@ def solve_sphere_capsule(cap, body):
                 r.x * impulse.y - r.y * impulse.x
             )
 
-            angular_str = 0.1;
-            cap.angular_velocity -= torque * cap.inv_inertia * angular_str
+            angular_str = 0.1
+
+            angular_accel = cap.world_inv_inertia_tensor * torque
+            cap.angular_velocity -= angular_accel * angular_str

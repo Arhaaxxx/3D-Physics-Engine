@@ -14,12 +14,13 @@ engine.capsules = []
 cap = RigidCapsule(
     position=Vector3(0, 0, 20),
     height=10,
-    mass=100,
+    mass=5,
     radius=1
 )
 
 # cap.orientation = Vector3(0,0,1)
-cap.angular_velocity = Vector3(0.05,0,0)
+cap.angular_velocity = Vector3(0.5,0.2,0)
+cap.velocity = Vector3(100,0,0)
 
 engine.capsules.append(cap)
 
@@ -35,19 +36,19 @@ engine.capsules.append(cap)
 
 # engine.add_bodies(target)
 
-for x in range(-5, 5):
-    for y in range(-5, 5):
-        for z in range(1, 6):
+# for x in range(-3, 3):
+#     for y in range(-3, 3):
+#         for z in range(1, 4):
 
-            engine.add_bodies(
-                Body(
-                    mass=0.05,
-                    position=Vector3(x*0.6, y*0.6, z*0.6+2),
-                    velocity=Vector3(0,0,0),
-                    shape="sphere",
-                    radius=0.2
-                )
-            )
+#             engine.add_bodies(
+#                 Body(
+#                     mass=0.05,
+#                     position=Vector3(x*0.6, y*0.6, z*0.6+2),
+#                     velocity=Vector3(0,0,0),
+#                     shape="sphere",
+#                     radius=0.2
+#                 )
+#             )
 
 engine.build_arrays()
 
